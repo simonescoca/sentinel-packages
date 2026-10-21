@@ -1,0 +1,37 @@
+# Every Monday (and by hand, or when the script changes): the backup copy is refreshed from the official sources.
+# Red = a file is missing from both the official source and the copy (GitHub sends an email). Committing status.json
+# keeps the repo active: GitHub disables scheduled runs in public repos with no activity for 60 days.
+name: Refresh the backup
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [refresh.py, versions.json, .github/workflows/refresh.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download, check and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 refresh.py
+      - name: Save the status
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status.json
+          git diff --cached --quiet || { git commit -m "Backup status: $(date -u +%Y-%m-%d)" && git push; }
